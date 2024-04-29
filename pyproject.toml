@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "igrinsdr-helper"
+version = "0.1.0"
+description = ""
+authors = ["Jae-Joon Lee <lee.j.joon@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+ipytree = "^0.2.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
