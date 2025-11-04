@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "igrinsdr-helper"
 version = "0.1.0"
-description = ""
+description = "Helper module for igrinsdr"
 authors = ["Jae-Joon Lee <lee.j.joon@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-# python = "^3.10"
+python = ">=3.10,<3.13"
 ipytree = "^0.2.2"
 
 
