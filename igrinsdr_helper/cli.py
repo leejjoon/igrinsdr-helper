@@ -1,7 +1,10 @@
 import argparse
 from pathlib import Path
 from textual.app import App, ComposeResult
-from textual.widgets import Tree
+from textual.widgets import Tree, Footer, Input
+from textual.binding import Binding
+from textual.containers import Container
+from rich.text import Text
 from igrinsdr_helper.igrinsdr_tree import _get_ad_tree
 
 def convert_markup(label):
@@ -10,44 +13,124 @@ def convert_markup(label):
     label = label.strip("'")
     return label.replace("<b>", "[b]").replace("</b>", "[/b]")
 
+class IgrinsTree(Tree):
+    BINDINGS = [
+        Binding("tab", "toggle_node", "Toggle Node"),
+    ]
+
 class IgrinsDrApp(App):
     CSS = """
-    Tree {
+    IgrinsTree {
         padding: 1;
+        width: 100%;
+        height: 1fr;
+    }
+    Input {
+        dock: bottom;
+        width: 100%;
+        height: 3;
+        display: none;
     }
     """
+
+    BINDINGS = [
+        Binding("q", "quit", "Quit"),
+        Binding("/", "search", "Search"),
+    ]
 
     def __init__(self, root_node, **kwargs):
         super().__init__(**kwargs)
         self.root_node_data = root_node
+        self.original_labels = {} # Store original labels to restore after search
 
     def compose(self) -> ComposeResult:
-        yield Tree("IGRINS DR Helper")
+        yield IgrinsTree("IGRINS DR Helper")
+        yield Input(placeholder="Search...")
+        yield Footer()
 
     def on_mount(self):
-        tree = self.query_one(Tree)
-        tree.show_root = False # The root from logic is usually a container
-        # Note: igrinsdr_tree._get_ad_tree returns a root node.
-        # We can set the tree root label or just add children to it.
-        # Let's inspect the root node label from _get_ad_tree.
-        # It seems to be common tags.
-        
-        # Level 1 (Root) is handled by build_tree call, but since we are populating existing tree.root,
-        # we treat tree.root as Level 1.
+        tree = self.query_one(IgrinsTree)
+        tree.show_root = False 
         self.build_tree(tree.root, self.root_node_data, level=1)
         tree.root.expand()
 
     def build_tree(self, tree_node, data_node, level=1):
-        tree_node.label = convert_markup(data_node.label)
+        clean_curr_label = convert_markup(data_node.label)
+        tree_node.label = clean_curr_label
+        # Store for restoration (using id or object ref as key)
+        self.original_labels[tree_node] = clean_curr_label
+
         if level < 3:
              tree_node.expand()
 
         for child in data_node.children:
             if not child.children:
-                tree_node.add_leaf(convert_markup(child.label))
+                lbl = convert_markup(child.label)
+                leaf = tree_node.add_leaf(lbl)
+                self.original_labels[leaf] = lbl
             else:
-                new_node = tree_node.add(convert_markup(child.label))
+                lbl = convert_markup(child.label)
+                new_node = tree_node.add(lbl)
+                self.original_labels[new_node] = lbl
                 self.build_tree(new_node, child, level=level+1)
+
+    def action_search(self):
+        input_widget = self.query_one(Input)
+        input_widget.display = True
+        input_widget.focus()
+
+    def on_input_submitted(self, message: Input.Submitted):
+        query = message.value.lower()
+        tree = self.query_one(IgrinsTree)
+        
+        # Reset labels
+        for node, original in self.original_labels.items():
+            node.label = original
+
+        if query:
+            self.highlight_nodes(tree.root, query)
+        
+        # Hide input and focus tree
+        input_widget = self.query_one(Input)
+        input_widget.display = False
+        input_widget.value = ""
+        tree.focus()
+
+    def highlight_nodes(self, node, query):
+        original_markup = self.original_labels.get(node, str(node.label))
+        
+        # We need to check if the PLAIN text matches the query to decide if we highlight
+        # Textual/Rich can parse the markup to text.
+        text_obj = Text.from_markup(original_markup)
+        plain_text = text_obj.plain.lower()
+
+        if query in plain_text:
+            # Match found
+            # 1. Highlight the matching word(s) with emphasized color (e.g., bold yellow or red)
+            # 2. Highlight the background of the entire line (e.g., dark grey/blue)
+            
+            # Use Rich's highlight_regex/words
+            # First, apply background to the whole text
+            text_obj.stylize("on #2a2a2a") # Subtle background
+            
+            # Then highlight the query
+            # Note: generic matching might be tricky if query is regex specials, assuming text query
+            import re
+            # Escape query just in case, and compile with ignore case
+            escaped_query = re.escape(query)
+            pattern = re.compile(escaped_query, re.IGNORECASE)
+            text_obj.highlight_regex(pattern, "bold #ff00ff") # Emphasized text color (magenta/pink)
+
+            node.label = text_obj
+            node.expand()
+            
+            parent = node.parent
+            while parent:
+                 parent.expand()
+                 parent = parent.parent
+
+        for child in node.children:
+            self.highlight_nodes(child, query)
 
 def print_simple_tree(node, level=0, max_level=None):
     indent = "  " * level
