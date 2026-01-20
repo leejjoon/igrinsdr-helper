@@ -8,6 +8,13 @@ from operator import itemgetter
 
 from collections import namedtuple
 MyNode = namedtuple("MyNode", ["label", "children"])
+from rich import print as rprint
+
+def convert_markup(label):
+    """Convert simple HTML-like markup to Textual markup."""
+    # Remove single quotes that might be around labels from the original helper
+    label = label.strip("'")
+    return label.replace("<b>", "[b]").replace("</b>", "[/b]")
 
 # rootdir = Path("indata/20240425")
 # fn_list, tags_list = [], []
@@ -72,10 +79,50 @@ def make_tree(node):
     return tree
 
 
-def get_ad_tree(paths, sort=True):
+def _collect_simple_tree_lines(node, lines, level=0, max_level=None):
+    indent = "  " * level
+    
+    # Add icon/color based on level (matching TUI logic)
+    icon = ""
+    if level == 0:
+        icon = "[green]\u25cf[/] " # Circle
+    elif level == 1:
+        icon = "[yellow]\u25cb[/] " # Empty circle
+    
+    # Convert markup to Rich/Textual format
+    clean_label = convert_markup(node.label)
+    
+    # Add to lines buffer
+    lines.append(f"{indent}- {icon}{clean_label}")
+    
+    if max_level is not None and level >= max_level:
+        return
+
+    for child in node.children:
+        _collect_simple_tree_lines(child, lines, level + 1, max_level)
+
+def print_simple_tree(node, level=0, max_level=None):
+    lines = []
+    _collect_simple_tree_lines(node, lines, level, max_level)
+    rprint("\n".join(lines))
+
+
+def get_ad_tree(paths, sort=True, simple=False):
     if sort:
         paths = sorted(paths)
+    
+    root_node = _get_ad_tree(paths)
 
-    tree = make_tree(_get_ad_tree(paths))
+    if simple:
+        # User requested simple output mode logic
+        # Default behavior of TUI is expanding level 1 and 2 (root + groups)
+        # So we set max_level=2 by default for this convenience function, 
+        # or maybe we should default to None? 
+        # "results show the tree open to the level 2 similar to the TUI version."
+        # The user requested this behavior for CLI --simple. Reasonable to assume for API too.
+        print_simple_tree(root_node, max_level=2)
+        return
+
+    tree = make_tree(root_node)
 
     return tree

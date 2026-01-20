@@ -5,13 +5,7 @@ from textual.widgets import Tree, Footer, Input
 from textual.binding import Binding
 from textual.containers import Container
 from rich.text import Text
-from igrinsdr_helper.igrinsdr_tree import _get_ad_tree
-
-def convert_markup(label):
-    """Convert simple HTML-like markup to Textual markup."""
-    # Remove single quotes that might be around labels from the original helper
-    label = label.strip("'")
-    return label.replace("<b>", "[b]").replace("</b>", "[/b]")
+from igrinsdr_helper.igrinsdr_tree import _get_ad_tree, print_simple_tree, convert_markup
 
 class IgrinsTree(Tree):
     BINDINGS = [
@@ -50,12 +44,22 @@ class IgrinsDrApp(App):
 
     def on_mount(self):
         tree = self.query_one(IgrinsTree)
-        tree.show_root = False 
+        tree.show_root = True 
         self.build_tree(tree.root, self.root_node_data, level=1)
         tree.root.expand()
 
     def build_tree(self, tree_node, data_node, level=1):
-        clean_curr_label = convert_markup(data_node.label)
+        # Add icon/color based on level
+        icon = ""
+        if level == 1:
+            icon = "[green]\u25cf[/] " # Circle
+        elif level == 2:
+            icon = "[yellow]\u25cb[/] " # Empty circle
+        
+        # Note: data_node.label contains markup like [b]...[/b]
+        # We prepend the icon to the label
+        clean_curr_label = f"{icon}{convert_markup(data_node.label)}"
+        
         tree_node.label = clean_curr_label
         # Store for restoration (using id or object ref as key)
         self.original_labels[tree_node] = clean_curr_label
@@ -65,14 +69,26 @@ class IgrinsDrApp(App):
 
         for child in data_node.children:
             if not child.children:
+                # Leaf node (Level > 2 usually)
+                # No icon requested for deeper levels, or keep simple
+                # "only level 1 and 2" requested with icons
                 lbl = convert_markup(child.label)
+                if level + 1 == 2: # Child is level 2
+                     lbl = f"[yellow]\u25cb[/] {lbl}"
+                
                 leaf = tree_node.add_leaf(lbl)
                 self.original_labels[leaf] = lbl
             else:
-                lbl = convert_markup(child.label)
+                # Subgroup
+                child_level = level + 1
+                icon = ""
+                if child_level == 2:
+                     icon = "[yellow]\u25cb[/] "
+                
+                lbl = f"{icon}{convert_markup(child.label)}"
                 new_node = tree_node.add(lbl)
                 self.original_labels[new_node] = lbl
-                self.build_tree(new_node, child, level=level+1)
+                self.build_tree(new_node, child, level=child_level)
 
     def action_search(self):
         input_widget = self.query_one(Input)
@@ -132,17 +148,7 @@ class IgrinsDrApp(App):
         for child in node.children:
             self.highlight_nodes(child, query)
 
-def print_simple_tree(node, level=0, max_level=None):
-    indent = "  " * level
-    # Strip markup for simple output
-    clean_label = node.label.replace("<b>", "").replace("</b>", "").replace("'", "")
-    print(f"{indent}- {clean_label}")
-    
-    if max_level is not None and level >= max_level:
-        return
 
-    for child in node.children:
-        print_simple_tree(child, level + 1, max_level)
 
 def main():
     parser = argparse.ArgumentParser(description="IGRINS DR Helper CLI")

@@ -25,35 +25,50 @@ def test_print_simple_tree(capsys):
     captured = capsys.readouterr()
     res = captured.out
     
-    # Expectation for max_level=2:
-    # - Root (0)
-    #   - Group 1 (1)
-    #     - Child A (2) -- Printed because 2 is not >= 2? Wait.
-    # Logic: if max_level is not None and level >= max_level: return.
-    # Level 0: Print. Recurse (1).
-    # Level 1: Print. Recurse (2).
-    # Level 2: Print. Return (2 >= 2).
+    # Expectation with icons (L0=Green Circle, L1=Yellow Circle)
+    # Root (L0) -> ● Root
+    # Group (L1) -> ○ Group 1
+    # Child (L2) -> Child A (No icon, or depends on logic. Current logic: only L0/L1 get special icons)
     
-    # So we see 0, 1, 2. (Level 2 nodes are visible).
+    assert "- ● Root" in res
+    assert "- ○ Group 1" in res
+    assert "- Child A" in res
+
+def test_get_ad_tree_simple_api(capsys):
+    from igrinsdr_helper.igrinsdr_tree import get_ad_tree, _get_ad_tree
     
-    assert "- Root" in res
-    assert "  - Group 1" in res
-    assert "    - Child A" in res
+    import igrinsdr_helper.igrinsdr_tree as tree_mod
+    
+    orig_func = tree_mod._get_ad_tree
+    
+    child = MyNode("'Child A'", [])
+    group = MyNode("<b>Group 1</b>", [child])
+    root = MyNode("'Root'", [group])
+    
+    tree_mod._get_ad_tree = lambda x: root
+    
+    try:
+        # Call with simple=True
+        res = tree_mod.get_ad_tree([], simple=True)
+        assert res is None 
+        
+        captured = capsys.readouterr()
+        assert "- ● Root" in captured.out
+        assert "- ○ Group 1" in captured.out
+        assert "- Child A" in captured.out
+        
+    finally:
+        tree_mod._get_ad_tree = orig_func
 
 def test_print_simple_tree_depth_limit(capsys):
-    child = MyNode("'Child A'", []) # Level 2 relative to root
-    group = MyNode("<b>Group 1</b>", [child]) # Level 1
-    root = MyNode("'Root'", [group]) # Level 0
-
-    # If we set max_level=1
-    # Level 0: Print. Recurse.
-    # Level 1: Print. Return (1 >= 1).
-    # Child A (Level 2) should NOT be printed.
-
+    child = MyNode("'Child A'", []) 
+    group = MyNode("<b>Group 1</b>", [child]) 
+    root = MyNode("'Root'", [group]) 
+    
     print_simple_tree(root, max_level=1)
     captured = capsys.readouterr()
     res = captured.out
 
-    assert "- Root" in res
-    assert "  - Group 1" in res
+    assert "- ● Root" in res
+    assert "- ○ Group 1" in res
     assert "    - Child A" not in res
